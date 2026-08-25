@@ -1,0 +1,74 @@
+name: Rakuten Mobile public-site monitor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - rakuten_monitor.py
+      - .github/workflows/rakuten-monitor.yml
+  schedule:
+    - cron: "35 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: rakuten-mobile-public-monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit live site and submit IndexNow when appropriate
+        id: audit
+        shell: bash
+        run: |
+          set -o pipefail
+          if [[ "${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "workflow_dispatch" || "$(date -u +%H)" == "00" ]]; then
+            python3 rakuten_monitor.py --submit-indexnow 2>&1 | tee rakuten-monitor.log
+          else
+            python3 rakuten_monitor.py 2>&1 | tee rakuten-monitor.log
+          fi
+
+      - name: Publish run summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Rakuten Mobile public-site monitor" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 80 rakuten-monitor.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rakuten-monitor-${{ github.run_number }}
+          path: |
+            rakuten-monitor-report.json
+            rakuten-monitor.log
+          retention-days: 30
+
+      - name: Open one incident issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const title = '[楽天監視] 公開サイト異常';
+            const { data } = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
+            if (!data.some(issue => issue.title === title)) {
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                body: `公開サイト監視が失敗しました。実行ログ: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+              });
+            }
