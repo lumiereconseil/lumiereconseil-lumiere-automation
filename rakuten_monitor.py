@@ -238,12 +238,22 @@ def main() -> int:
         except ET.ParseError as exc:
             errors.append(f"sitemap.xml XMLエラー: {exc}")
             urls = [urllib.parse.urljoin(BASE_URL, path.lstrip("/")) for path in FALLBACK_PATHS]
-    urls = list(dict.fromkeys([BASE_URL] + urls))
+    urls = list(dict.fromkeys(urls))
     foreign = [u for u in urls if urllib.parse.urlparse(u).netloc != "rakutenmobile.pages.dev"]
     if foreign:
         errors.append(f"sitemapに外部URL: {foreign}")
     urls = [u for u in urls if urllib.parse.urlparse(u).netloc == "rakutenmobile.pages.dev"]
     report["url_count"] = len(urls)
+
+    root_result = fetch(BASE_URL)
+    root_snippet = re.sub(r"\\s+", " ", root_result.body).strip()[:240]
+    report["root"] = {
+        "status": root_result.status,
+        "final_url": root_result.final_url,
+        "response_snippet": root_snippet,
+    }
+    if root_result.status != 200:
+        errors.append(f"トップURL HTTP {root_result.status}: response={root_snippet!r}")
 
     robots = fetch(ROBOTS_URL)
     report["robots_status"] = robots.status
@@ -294,17 +304,21 @@ def main() -> int:
             if term not in site_text:
                 errors.append(f"開催中キャンペーン情報なし: {term}")
 
-    if args.submit_indexnow and urls:
+    indexnow_urls = [
+        str(record["url"]) for record in page_records
+        if record.get("status") == 200
+    ]
+    if args.submit_indexnow and indexnow_urls:
         payload = json.dumps({
             "host": "rakutenmobile.pages.dev",
             "key": INDEXNOW_KEY,
             "keyLocation": f"{BASE_URL}{INDEXNOW_KEY}.txt",
-            "urlList": urls,
+            "urlList": indexnow_urls,
         }, ensure_ascii=False).encode("utf-8")
         try:
             sent = fetch(INDEXNOW_URL, method="POST", data=payload,
                          headers={"Content-Type": "application/json; charset=utf-8"})
-            report["indexnow"] = {"status": sent.status, "response": sent.body[:500]}
+            report["indexnow"] = {"status": sent.status, "url_count": len(indexnow_urls), "response": sent.body[:500]}
             if sent.status not in {200, 202}:
                 errors.append(f"IndexNow送信失敗: HTTP {sent.status}")
         except Exception as exc:

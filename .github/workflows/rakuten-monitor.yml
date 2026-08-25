@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "$(date -u +%H)" == "00" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.event_name }}" == "push" || "$(date -u +%H)" == "00" ]]; then
             python3 rakuten_monitor.py --submit-indexnow 2>&1 | tee rakuten-monitor.log
           else
             python3 rakuten_monitor.py 2>&1 | tee rakuten-monitor.log
