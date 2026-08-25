@@ -19,13 +19,21 @@ jobs:
         shell: bash
         run: |
           set -u
-          for url in             "https://rakutenmobile.pages.dev/"             "https://rakutenmobile.pages.dev/index.html"             "https://rakutenmobile.pages.dev/sitemap.xml"             "https://rakutenmobile.pages.dev/en/"             "https://rakutenmobile.pages.dev/cdn-cgi/trace"
+          for url in \
+            "https://rakutenmobile.pages.dev/" \
+            "https://rakutenmobile.pages.dev/index.html" \
+            "https://rakutenmobile.pages.dev/sitemap.xml" \
+            "https://rakutenmobile.pages.dev/en/" \
+            "https://rakutenmobile.pages.dev/cdn-cgi/trace"
           do
             echo "::group::$url"
-            curl --http1.1 --connect-timeout 10 --max-time 25 -sS               -A "Mozilla/5.0 (compatible; RakutenMobileSiteMonitor/1.0)"               -D headers.txt -o body.bin -w "status=%{http_code} remote_ip=%{remote_ip} total=%{time_total}s\n"               "$url" || true
+            curl --http1.1 --connect-timeout 10 --max-time 25 -sS \
+              -A "Mozilla/5.0 (compatible; RakutenMobileSiteMonitor/1.0)" \
+              -D headers.txt -o body.bin -w "status=%{http_code} remote_ip=%{remote_ip} total=%{time_total}s\n" \
+              "$url" || true
             sed -n '1,80p' headers.txt || true
             file body.bin || true
-            head -c 600 body.bin | tr '\n' ' ' || true
+            head -c 6000 body.bin | tr '\n' ' ' || true
             echo
             echo "::endgroup::"
           done
