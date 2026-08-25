@@ -162,8 +162,14 @@ def audit_page(result: FetchResult) -> tuple[dict, list[str], list[str], str]:
     errors: list[str] = []
     warnings: list[str] = []
     if result.status != 200:
-        errors.append(f"HTTP {result.status}: {result.url}")
-        return {"url": result.url, "status": result.status, "final_url": result.final_url}, errors, warnings, ""
+        snippet = re.sub(r"\s+", " ", result.body).strip()[:240]
+        errors.append(f"HTTP {result.status}: {result.url} response={snippet!r}")
+        return {
+            "url": result.url,
+            "status": result.status,
+            "final_url": result.final_url,
+            "response_snippet": snippet,
+        }, errors, warnings, ""
     if "text/html" not in result.content_type.lower():
         errors.append(f"HTMLでないContent-Type: {result.url} ({result.content_type})")
     doc = DocumentParser()
