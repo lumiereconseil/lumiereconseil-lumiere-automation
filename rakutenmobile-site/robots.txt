@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://rakutenmobile.pages.dev/sitemap.xml

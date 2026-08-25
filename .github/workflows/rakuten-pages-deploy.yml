@@ -1,0 +1,47 @@
+name: Deploy Rakuten Mobile Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "rakutenmobile-site/**"
+      - ".github/workflows/rakuten-pages-deploy.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rakutenmobile-pages-production
+  cancel-in-progress: true
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment root
+        shell: bash
+        run: |
+          test -f rakutenmobile-site/index.html
+          test -f rakutenmobile-site/_headers
+          test -f rakutenmobile-site/_redirects
+          test -f rakutenmobile-site/sitemap.xml
+          grep -q "最大10万" rakutenmobile-site/index.html
+          grep -q "8月30日" rakutenmobile-site/index.html
+          grep -q "campaign-20260830" rakutenmobile-site/sitemap.xml
+          test "$(cat rakutenmobile-site/_redirects)" = "/go/* https://r10.to/h90H6D 302"
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 07614b74d2ab42262297a53cc0f67a90
+          command: pages deploy rakutenmobile-site --project-name=rakutenmobile --branch=main
+
+      - name: Verify production
+        shell: bash
+        run: |
+          python3 rakuten_monitor.py --submit-indexnow
