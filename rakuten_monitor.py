@@ -247,14 +247,27 @@ def main() -> int:
     report["url_count"] = len(urls)
 
     root_result = fetch(BASE_URL)
-    root_snippet = re.sub(r"\\s+", " ", root_result.body).strip()[:240]
+    root_snippet = re.sub(r"\s+", " ", root_result.body).strip()[:240]
+    root_known_block = (
+        root_result.status == 403
+        and "Suspected Phishing" in root_result.body
+        and any(
+            urllib.parse.urlparse(url).path == "/rakuten-mobile-referral/"
+            for url in urls
+        )
+    )
     report["root"] = {
         "status": root_result.status,
         "final_url": root_result.final_url,
         "response_snippet": root_snippet,
+        "known_block": root_known_block,
     }
-    if root_result.status != 200:
+    if root_result.status != 200 and not root_known_block:
         errors.append(f"トップURL HTTP {root_result.status}: response={root_snippet!r}")
+    elif root_known_block:
+        report["known_incidents"] = [
+            "トップURLはCloudflare Trust & Safetyで403。公開導線とsitemapは/rakuten-mobile-referral/へ迂回済み。"
+        ]
 
     robots = fetch(ROBOTS_URL)
     report["robots_status"] = robots.status
