@@ -98,7 +98,11 @@ class FetchResult:
 def fetch(url: str, *, method: str = "GET", data: bytes | None = None,
           headers: dict[str, str] | None = None) -> FetchResult:
     merged_headers = {
-        "User-Agent": "RakutenReferralSiteMonitor/1.0 (+https://rakutenmobile.pages.dev/)",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/151.0.0.0 Safari/537.36"
+        ),
         "Accept": "text/html,application/xml,text/plain,application/json;q=0.9,*/*;q=0.8",
     }
     if headers:
