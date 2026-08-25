@@ -26,6 +26,7 @@ LOTTERY_URL = "https://network.mobile.rakuten.co.jp/campaign/referral-one-millio
 INDEXNOW_URL = "https://api.indexnow.org/indexnow"
 INDEXNOW_KEY = "7f4c96da748191bab16cd5ad7d8e30"
 REQUIRED_LANGS = {"ja", "en", "hi", "my", "zh-Hans", "x-default"}
+SOFT_BLOCK_MARKERS = ("site unavailable", "unable to access this site")
 FALLBACK_PATHS = [
     "/", "/en/", "/hi/", "/my/", "/zh/", "/mnp/", "/new-number/",
     "/campaign-20260830/", "/campaign-current/", "/share/", "/esim/",
@@ -93,6 +94,12 @@ class FetchResult:
     content_type: str
     body: str
     elapsed_ms: int
+
+
+def is_soft_block(result: FetchResult) -> bool:
+    """Detect Cloudflare/edge denial pages that misleadingly return HTTP 200."""
+    body = result.body.lower()
+    return all(marker in body for marker in SOFT_BLOCK_MARKERS)
 
 
 def fetch(url: str, *, method: str = "GET", data: bytes | None = None,
@@ -170,6 +177,16 @@ def audit_page(result: FetchResult) -> tuple[dict, list[str], list[str], str]:
             "final_url": result.final_url,
             "response_snippet": snippet,
         }, errors, warnings, ""
+    if is_soft_block(result):
+        snippet = re.sub(r"\\s+", " ", result.body).strip()[:240]
+        errors.append(f"SOFT_BLOCK HTTP 200: {result.url} response={snippet!r}")
+        return {
+            "url": result.url,
+            "status": result.status,
+            "final_url": result.final_url,
+            "available": False,
+            "response_snippet": snippet,
+        }, errors, warnings, ""
     if "text/html" not in result.content_type.lower():
         errors.append(f"HTMLでないContent-Type: {result.url} ({result.content_type})")
     doc = DocumentParser()
@@ -204,6 +221,7 @@ def audit_page(result: FetchResult) -> tuple[dict, list[str], list[str], str]:
         "status": result.status,
         "final_url": result.final_url,
         "elapsed_ms": result.elapsed_ms,
+        "available": True,
         "title": doc.title.strip(),
         "description": doc.meta.get("description", ""),
         "canonical": doc.canonical,
@@ -229,12 +247,18 @@ def main() -> int:
 
     sitemap = fetch(SITEMAP_URL)
     report["sitemap_status"] = sitemap.status
-    if sitemap.status != 200:
-        errors.append(f"sitemap.xml HTTP {sitemap.status}")
+    if sitemap.status != 200 or is_soft_block(sitemap):
+        if is_soft_block(sitemap):
+            errors.append("sitemap.xmlがHTTP 200のSite Unavailableに置換")
+        else:
+            errors.append(f"sitemap.xml HTTP {sitemap.status}")
         urls = [urllib.parse.urljoin(BASE_URL, path.lstrip("/")) for path in FALLBACK_PATHS]
     else:
         try:
             urls = parse_sitemap(sitemap.body)
+            if not urls:
+                errors.append("sitemap.xml内URLが0件")
+                urls = [urllib.parse.urljoin(BASE_URL, path.lstrip("/")) for path in FALLBACK_PATHS]
         except ET.ParseError as exc:
             errors.append(f"sitemap.xml XMLエラー: {exc}")
             urls = [urllib.parse.urljoin(BASE_URL, path.lstrip("/")) for path in FALLBACK_PATHS]
@@ -248,6 +272,7 @@ def main() -> int:
 
     root_result = fetch(BASE_URL)
     root_snippet = re.sub(r"\s+", " ", root_result.body).strip()[:240]
+    root_soft_block = is_soft_block(root_result)
     root_known_block = (
         root_result.status == 403
         and "Suspected Phishing" in root_result.body
@@ -260,9 +285,12 @@ def main() -> int:
         "status": root_result.status,
         "final_url": root_result.final_url,
         "response_snippet": root_snippet,
+        "soft_block": root_soft_block,
         "known_block": root_known_block,
     }
-    if root_result.status != 200 and not root_known_block:
+    if root_soft_block:
+        errors.append(f"トップURL SOFT_BLOCK HTTP 200: response={root_snippet!r}")
+    elif root_result.status != 200 and not root_known_block:
         errors.append(f"トップURL HTTP {root_result.status}: response={root_snippet!r}")
     elif root_known_block:
         report["known_incidents"] = [
@@ -273,6 +301,8 @@ def main() -> int:
     report["robots_status"] = robots.status
     if robots.status != 200:
         errors.append(f"robots.txt HTTP {robots.status}")
+    elif is_soft_block(robots):
+        errors.append("robots.txtがHTTP 200のSite Unavailableに置換")
     else:
         if re.search(r"(?im)^\s*disallow:\s*/\s*$", robots.body):
             errors.append("robots.txtが全体をDisallow")
@@ -320,7 +350,7 @@ def main() -> int:
 
     indexnow_urls = [
         str(record["url"]) for record in page_records
-        if record.get("status") == 200
+        if record.get("status") == 200 and record.get("available", True)
     ]
     if args.submit_indexnow and indexnow_urls:
         payload = json.dumps({
