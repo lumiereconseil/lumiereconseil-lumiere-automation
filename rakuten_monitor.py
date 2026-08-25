@@ -239,6 +239,7 @@ def main() -> int:
             errors.append(f"sitemap.xml XMLエラー: {exc}")
             urls = [urllib.parse.urljoin(BASE_URL, path.lstrip("/")) for path in FALLBACK_PATHS]
     urls = list(dict.fromkeys(urls))
+    urls = [u for u in urls if u.rstrip("/") != BASE_URL.rstrip("/")]
     foreign = [u for u in urls if urllib.parse.urlparse(u).netloc != "rakutenmobile.pages.dev"]
     if foreign:
         errors.append(f"sitemapに外部URL: {foreign}")
