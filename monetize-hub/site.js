@@ -1,0 +1,1 @@
+(()=>{const c=window.MONETIZE_CONFIG||{};document.querySelectorAll(".affiliate-link").forEach(a=>{const k=a.dataset.affiliateKey;if(c.affiliateLinks&&c.affiliateLinks[k]){a.href=c.affiliateLinks[k];a.rel="sponsored nofollow noopener";a.target="_blank"}})})();
