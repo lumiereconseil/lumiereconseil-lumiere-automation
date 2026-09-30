@@ -1,10 +1,7 @@
 name: X Immediate Post
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/x-now.yml"
+  workflow_dispatch: {}
 
 jobs:
   post-x:
@@ -13,6 +10,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Check X credentials
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          names = ["X_API_KEY","X_API_SECRET","X_ACCESS_TOKEN","X_ACCESS_SECRET"]
+          missing = [n for n in names if not os.getenv(n)]
+          if missing:
+              print("X posting skipped: missing GitHub Actions secrets: " + ", ".join(missing))
+              sys.exit(0)
+          PY
       - name: Install OAuth client
         run: pip install requests requests-oauthlib
       - name: Post to X
@@ -22,17 +34,15 @@ jobs:
           X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
           X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
         run: |
+          if [ -z "$X_API_KEY" ] || [ -z "$X_API_SECRET" ] || [ -z "$X_ACCESS_TOKEN" ] || [ -z "$X_ACCESS_SECRET" ]; then
+            echo "No X credentials; skipping without failure."
+            exit 0
+          fi
           python - <<'PY'
           import os, requests
           from requests_oauthlib import OAuth1
-
           text = "旅行のたびに、ポイント・予約サイト・AI活用を全部調べ直していませんか？ Lumière Conseil「トク旅AIラボ」で、旅費を抑えるための見直しポイントを整理。まずは無料診断から。 https://lumiereconseilai21.wordpress.com/ #旅行 #旅行節約 #AI活用"
-          auth = OAuth1(
-              os.environ["X_API_KEY"],
-              os.environ["X_API_SECRET"],
-              os.environ["X_ACCESS_TOKEN"],
-              os.environ["X_ACCESS_SECRET"],
-          )
+          auth = OAuth1(os.environ["X_API_KEY"], os.environ["X_API_SECRET"], os.environ["X_ACCESS_TOKEN"], os.environ["X_ACCESS_SECRET"])
           r = requests.post("https://api.x.com/2/tweets", auth=auth, json={"text": text}, timeout=30)
           print("status=", r.status_code)
           print(r.text)
