@@ -1,3 +1,4 @@
 requests
 google-api-python-client
-anthropic\nrequests-oauthlib\n
+anthropic
+requests-oauthlib
