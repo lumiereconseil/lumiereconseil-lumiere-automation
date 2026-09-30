@@ -1,0 +1,9 @@
+window.MONETIZE_CONFIG={
+  adsenseClient:"",
+  affiliateLinks:{
+    mobile_battery:"",
+    packing_cube:"",
+    esim:"",
+    carry_case:""
+  }
+};
